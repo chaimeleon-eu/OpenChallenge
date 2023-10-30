@@ -26,7 +26,8 @@ class Prostatecancerriskprediction(ClassificationAlgorithm):
         self.image_input_path = list(Path(self.image_input_dir).glob("*.mha"))[0]
 
         # load clinical information
-        with open("/input/clinical-information-prostate-mri.json") as fp:
+        # dictionary with patient_age and psa information
+        with open("/input/psa-and-age.json") as fp:
             self.clinical_info = json.load(fp)
 
         # path to output files

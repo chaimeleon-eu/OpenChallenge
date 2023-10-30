@@ -10,7 +10,7 @@ prostate challenge.
 
 The model uses two main inputs:
 - Prostate T2w MRI (*axial-t2-prostate-mri*), corresponding to the image in mha format.
-- Clinical data (*clinical-information-prostate-mri.json*), which includes the patient age and PSA.
+- Clinical data (*psa-and-age.json*), which includes the patient age and PSA.
 
 Then, after risk prediction, the model has to provide two main output:
 - The risk score (*prostate-cancer-risk-score.json*) which can have the values "Low" or "High".
