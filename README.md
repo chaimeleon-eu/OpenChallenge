@@ -13,4 +13,5 @@ This repository includes some example scripts to build the inference code for
 the evaluation of your models in both the Validation and Test phases of the 
 Classification phase using grand-challenge platform.
 - [Prostate Challenge](ProstateCancerRiskPrediction/README.md)
-- Lung Challenge
+- [Lung Challenge](LungCancerOSPrediction/README.md)
+
