@@ -1,6 +1,11 @@
 ground_truth*
 .DS_Store
 .idea/
+build.sh
+test.sh
+export.sh
+test/
+ground-truth/
 # Byte-compiled / optimized / DLL files
 __pycache__/
 *.py[cod]
