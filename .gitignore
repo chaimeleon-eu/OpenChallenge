@@ -112,3 +112,6 @@ ENV/
 
 # Pycharm
 .idea/
+
+# Docker
+.docker_temp*
