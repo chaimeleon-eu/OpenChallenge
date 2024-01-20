@@ -1,9 +1,18 @@
+from pathlib import Path
+from pandas import merge, DataFrame
+import json
 from sklearn import metrics
-import math
 import numpy as np
+import math
 
-from evalutils import ClassificationEvaluation
 from evalutils.io import CSVLoader
+
+_VAL_NUMBER_CASES = 55
+_TEST_NUMBER_CASES = 105
+
+INPUT_DIRECTORY="/input"
+OUTPUT_DIRECTORY="/output"
+NUMBER_CASES = _TEST_NUMBER_CASES
 
 
 def micro_specificity_calculation(y_true, y_pred, classes):
@@ -27,85 +36,103 @@ def micro_specificity_calculation(y_true, y_pred, classes):
     return specificity_micro
 
 
-class Coloncancertnmpredictionevaluation(ClassificationEvaluation):
-    def __init__(self):
-        super().__init__(
-            file_loader=CSVLoader(),
-            validators=(),
-            join_key="case",
-        )
+def write_metrics(*, metrics):
+    # Write a json document that is used for ranking results on the leaderboard
+    with open("/output/metrics.json", "w") as f:
+        f.write(json.dumps(metrics))
 
-    def score_aggregates(self):
 
-        # Tumor pathological category (T)
-        y_test = self._cases["t_ground_truth"]
-        y_pred_prob_t1 = self._cases["t1_prob"]
-        y_pred_prob_t2 = self._cases["t2_prob"]
-        y_pred_prob_t3 = self._cases["t3_prob"]
-        y_pred_prob_t4a = self._cases["t4a_prob"]
-        y_pred_prob_t4b = self._cases["t4b_prob"]
+def main():
 
-        y_pred_prob = np.column_stack((y_pred_prob_t1, y_pred_prob_t2, y_pred_prob_t3, y_pred_prob_t4a, y_pred_prob_t4b))
+    path_ground_truth = Path(__file__).parent / 'ground-truth' / 'reference.csv'
+    path_submission = sorted(Path(INPUT_DIRECTORY).glob('*.csv'))[0]
 
-        auc_t = metrics.roc_auc_score(y_test, y_pred_prob, multi_class='ovr')
+    file_loader = CSVLoader()
+    ground_truth = DataFrame(file_loader.load(fname=path_ground_truth))
+    submission = DataFrame(file_loader.load(fname=path_submission))
 
-        micro_sensitivity_t = metrics.recall_score(self._cases["t_ground_truth"],
-                                                   self._cases["t_prediction"],
-                                                   average='micro')
+    if len(submission) != NUMBER_CASES:
+        raise RuntimeError(f"{NUMBER_CASES} cases were expected in submission file and {len(submission)} "
+                           f"were submitted")
 
-        micro_specificity_t = micro_specificity_calculation(self._cases["t_ground_truth"],
-                                                   self._cases["t_prediction"],
-                                                   classes = [0, 1, 2, 3, 4])
+    cases = merge(
+        left=ground_truth,
+        right=submission,
+        indicator=True,
+        how="outer",
+        suffixes=("_ground_truth", "_prediction"),
+        on="case"
+    )
 
-        balanced_accuracy_t = metrics.balanced_accuracy_score(self._cases["t_ground_truth"],
-                                                              self._cases["t_prediction"])
+    # Tumor pathological category (T)
+    y_test = cases["t_ground_truth"]
+    y_pred_prob_t1_t2 = cases["t1_t2_prob"]
+    y_pred_prob_t3 = cases["t3_prob"]
+    y_pred_prob_t4a = cases["t4a_prob"]
+    y_pred_prob_t4b = cases["t4b_prob"]
 
-        score_t = 0.4 * auc_t + 0.2 * micro_sensitivity_t + 0.2 * micro_specificity_t + 0.2 * balanced_accuracy_t
+    y_pred_prob = np.column_stack((y_pred_prob_t1_t2, y_pred_prob_t3, y_pred_prob_t4a, y_pred_prob_t4b))
 
-        # Regional nodes pathological category (N)
-        y_test = self._cases["n_ground_truth"]
-        y_pred_prob_n0 = self._cases["n0_prob"]
-        y_pred_prob_n1 = self._cases["n1_prob"]
-        y_pred_prob_n2 = self._cases["n2_prob"]
+    auc_t = metrics.roc_auc_score(y_test, y_pred_prob, multi_class='ovr')
 
-        y_pred_prob = np.column_stack(
-            (y_pred_prob_n0, y_pred_prob_n1, y_pred_prob_n2))
+    micro_sensitivity_t = metrics.recall_score(cases["t_ground_truth"],
+                                               cases["t_prediction"],
+                                               average='micro')
 
-        auc_n = metrics.roc_auc_score(y_test, y_pred_prob, multi_class='ovr')
+    micro_specificity_t = micro_specificity_calculation(cases["t_ground_truth"],
+                                                        cases["t_prediction"],
+                                                        classes=[0, 1, 2, 3])
 
-        micro_sensitivity_n = metrics.recall_score(self._cases["n_ground_truth"],
-                                                   self._cases["n_prediction"],
-                                                   average='micro')
+    balanced_accuracy_t = metrics.balanced_accuracy_score(cases["t_ground_truth"],
+                                                          cases["t_prediction"])
 
-        micro_specificity_n = micro_specificity_calculation(self._cases["n_ground_truth"],
-                                                            self._cases["n_prediction"],
-                                                            classes=[0, 1, 2])
+    score_t = 0.4 * auc_t + 0.2 * micro_sensitivity_t + 0.2 * micro_specificity_t + 0.2 * balanced_accuracy_t
 
-        balanced_accuracy_n = metrics.balanced_accuracy_score(self._cases["n_ground_truth"],
-                                                              self._cases["n_prediction"])
+    # Regional nodes pathological category (N)
+    y_test = cases["n_ground_truth"]
+    y_pred_prob_n0 = cases["n0_prob"]
+    y_pred_prob_n1 = cases["n1_prob"]
+    y_pred_prob_n2 = cases["n2_prob"]
 
-        score_n = 0.4 * auc_n + 0.2 * micro_sensitivity_n + 0.2 * micro_specificity_n + 0.2 * balanced_accuracy_n
+    y_pred_prob = np.column_stack(
+        (y_pred_prob_n0, y_pred_prob_n1, y_pred_prob_n2))
 
-        # Metastasis pathological category (M)
+    auc_n = metrics.roc_auc_score(y_test, y_pred_prob, multi_class='ovr')
 
-        fpr, tpr, _ = metrics.roc_curve(self._cases["m_ground_truth"], self._cases["m_prob"],
-                                        pos_label=1)  # positive class is 1; negative class is 0
-        auc_m = metrics.auc(fpr, tpr)
-        if math.isnan(auc_m):
-            auc_m = 0
-        balanced_accuracy_m = metrics.balanced_accuracy_score(self._cases["m_ground_truth"],
-                                                              self._cases["m_prediction"])
-        f1_score_m = metrics.f1_score(self._cases["m_ground_truth"], self._cases["m_prediction"])
-        sensitivity_m = metrics.recall_score(self._cases["m_ground_truth"], self._cases["m_prediction"])
-        tn, fp, fn, tp = metrics.confusion_matrix(self._cases["m_ground_truth"],
-                                                  self._cases["m_prediction"]).ravel()
-        specificity_m = tn / (tn + fp)
-        score_m = 0.4 * auc_m + 0.2 * sensitivity_m + 0.2 * specificity_m + 0.2 * balanced_accuracy_m
+    micro_sensitivity_n = metrics.recall_score(cases["n_ground_truth"],
+                                               cases["n_prediction"],
+                                               average='micro')
 
-        # Final score
-        score = 0.4 * score_t + 0.3 * score_n + 0.3 * score_m
+    micro_specificity_n = micro_specificity_calculation(cases["n_ground_truth"],
+                                                        cases["n_prediction"],
+                                                        classes=[0, 1, 2])
 
-        return {
+    balanced_accuracy_n = metrics.balanced_accuracy_score(cases["n_ground_truth"],
+                                                          cases["n_prediction"])
+
+    score_n = 0.4 * auc_n + 0.2 * micro_sensitivity_n + 0.2 * micro_specificity_n + 0.2 * balanced_accuracy_n
+
+    # Metastasis pathological category (M)
+
+    fpr, tpr, _ = metrics.roc_curve(cases["m_ground_truth"], cases["m1_prob"],
+                                    pos_label=1)  # positive class is 1; negative class is 0
+    auc_m = metrics.auc(fpr, tpr)
+    if math.isnan(auc_m):
+        auc_m = 0
+    balanced_accuracy_m = metrics.balanced_accuracy_score(cases["m_ground_truth"],
+                                                          cases["m_prediction"])
+    f1_score_m = metrics.f1_score(cases["m_ground_truth"], cases["m_prediction"])
+    sensitivity_m = metrics.recall_score(cases["m_ground_truth"], cases["m_prediction"])
+    tn, fp, fn, tp = metrics.confusion_matrix(cases["m_ground_truth"],
+                                              cases["m_prediction"]).ravel()
+    specificity_m = tn / (tn + fp)
+    score_m = 0.4 * auc_m + 0.2 * sensitivity_m + 0.2 * specificity_m + 0.2 * balanced_accuracy_m
+
+    # Final score
+    score = 0.4 * score_t + 0.3 * score_n + 0.3 * score_m
+
+    final_metrics = dict()
+    final_metrics["aggregates"] = {
             "score_t": score_t,
             "auc_t": auc_t,
             "balanced_accuracy_t": balanced_accuracy_t,
@@ -124,6 +151,8 @@ class Coloncancertnmpredictionevaluation(ClassificationEvaluation):
             "score": score
         }
 
+    write_metrics(metrics=final_metrics)
+
 
 if __name__ == "__main__":
-    Coloncancertnmpredictionevaluation().evaluate()
+    main()

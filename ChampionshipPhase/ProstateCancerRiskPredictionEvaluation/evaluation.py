@@ -3,18 +3,23 @@ import math
 
 from evalutils import ClassificationEvaluation
 from evalutils.io import CSVLoader
+from evalutils.validators import NumberOfCasesValidator
+
+_VAL_NUMBER_CASES = 63
+_TEST_NUMBER_CASES = 127
 
 
 class Prostatecancerriskpredictionevaluation(ClassificationEvaluation):
     def __init__(self):
         super().__init__(
             file_loader=CSVLoader(),
-            validators=(),
+            validators=(
+                NumberOfCasesValidator(num_cases=_TEST_NUMBER_CASES),
+            ),
             join_key="case",
         )
 
     def score_aggregates(self):
-
         fpr, tpr, _ = metrics.roc_curve(self._cases["risk_score_ground_truth"], self._cases["risk_score_prob"],
                                         pos_label=1)  # positive class is 1; negative class is 0
         auc = metrics.auc(fpr, tpr)
